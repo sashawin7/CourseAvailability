@@ -1,0 +1,69 @@
+name: GW seat watch
+
+on:
+  schedule:
+    # Every 30 minutes. GitHub's scheduler is best-effort and often runs a few
+    # minutes late; :00/:30 on the dot is not guaranteed.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:        # lets you trigger a run by hand from the Actions tab
+
+permissions:
+  contents: write           # commit state.json back to the repo
+  issues: write             # open the backup alert issue
+
+concurrency:
+  group: seat-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests beautifulsoup4
+
+      - name: Check CRNs
+        id: check
+        env:
+          # ---- edit these to watch something else ----
+          CRNS: "53900,53901"
+          SUBJECT: MATH
+          COURSE: "2184"
+          TERM: "202603"
+          # --------------------------------------------
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+        run: python watch_crns.py
+
+      # Backup alert: fires whether or not the email went out. Once you trust
+      # the email, delete this whole step.
+      - name: Open alert issue
+        if: steps.check.outputs.opened == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ME: sashawin7     # <-- CHANGE THIS to your GitHub username
+        run: |
+          python - <<'EOF' > alert.md
+          import json
+          state = json.load(open("state.json"))
+          open_crns = [c for c, s in state.items() if s == "OPEN"]
+          print("CRN " + ", ".join(open_crns))
+          EOF
+          gh issue create \
+            --title "SEAT OPEN: $(head -n 1 alert.md)" \
+            --body "@$ME A section you're watching is OPEN. Register: https://banweb.gwu.edu/"
+
+      - name: Persist state
+        if: always()
+        run: |
+          git config user.name  "seat-watch-bot"
+          git config user.email "seat-watch-bot@users.noreply.github.com"
+          git add state.json || true
+          git diff --staged --quiet || git commit -m "state: $(date -u +%H:%M)"
+          git push || true
