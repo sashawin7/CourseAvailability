@@ -35,6 +35,9 @@ jobs:
           COURSE: "2184"
           TERM: "202603"
           ALERT_FILE: alert.md
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
         run: python watch_crns.py
 
       - name: Open alert issue
