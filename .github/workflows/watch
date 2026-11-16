@@ -3,7 +3,7 @@ name: REL 1010 seat watch
 on:
   schedule:
     # Every 30 minutes. GitHub's scheduler is best-effort and often runs late.
-    - cron: "*/30 * * * *"
+    - cron: "*/7 * * * *"
   workflow_dispatch:
 
 permissions:
