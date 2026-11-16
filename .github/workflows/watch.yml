@@ -2,7 +2,8 @@ name: REL 1010 seat watch
 
 on:
   schedule:
-    # Every 30 minutes. GitHub's scheduler is best-effort and often runs late.
+    # GitHub throttles scheduled runs hard and drops most of them; treat this
+    # as "a handful of checks a day", not literally every 7 minutes.
     - cron: "*/7 * * * *"
   workflow_dispatch:
 
@@ -11,12 +12,16 @@ permissions:
   issues: write
 
 concurrency:
-  group: seat-watch
-  cancel-in-progress: false
+  # Group renamed to escape a stuck run holding the old "seat-watch" group.
+  # cancel-in-progress lets a new run supersede a wedged one instead of
+  # queueing behind it forever.
+  group: seat-watch-v2
+  cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 5        # never let a hung job sit and block the group
     steps:
       - uses: actions/checkout@v6
 
@@ -54,10 +59,14 @@ jobs:
             --title "SEAT OPEN: REL 1010 (CRN 77673)" \
             --body "@$ME The New Testament just opened. Register: https://banweb.gwu.edu/"
 
-      - name: Persist state
+      # Commits on EVERY run, not just on status changes. Two reasons:
+      # the repo never goes 60 days quiet (which silently disabled the
+      # schedule on Nov 3), and last_checked.txt shows from the repo front
+      # page that the watcher is alive.
+      - name: Persist state and heartbeat
         if: always()
         run: |
-          date -u +"last checked: %Y-%m-%d %H:%MZ" > last_checked.txt
+          date -u +"last checked: %Y-%m-%d %H:%M UTC" > last_checked.txt
           git config user.name "seat-watch-bot"
           git config user.email "seat-watch-bot@users.noreply.github.com"
           git add state.json last_checked.txt || true
